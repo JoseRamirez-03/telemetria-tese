@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 
 const app = express();
 
-// MODIFICACIÓN: CORS configurado para aceptar cualquier origen (vital para la App de Android)
 app.use(cors());
 app.use(express.json());
 
@@ -37,12 +36,10 @@ const Registro = mongoose.model('Registro', esquemaClic);
 // 3. RUTAS DEL SERVIDOR (APIs)
 // ==========================================
 
-// Ruta de prueba para saber si el servidor está vivo en internet
 app.get('/', (req, res) => {
     res.send('📡 Servidor de Telemetría TESE - Operativo y listo.');
 });
 
-// Guardar un nuevo dato
 app.post('/recibir-clic', async (req, res) => {
     try {
         const nuevoRegistro = new Registro(req.body);
@@ -54,7 +51,6 @@ app.post('/recibir-clic', async (req, res) => {
     }
 });
 
-// Enviar los datos al frontend
 app.get('/obtener-mapa', async (req, res) => {
     try {
         const datosHistoricos = await Registro.find();
@@ -65,7 +61,6 @@ app.get('/obtener-mapa', async (req, res) => {
     }
 });
 
-// Botón de pánico
 app.get('/limpiar', async (req, res) => {
     try {
         await Registro.deleteMany({});
@@ -76,7 +71,7 @@ app.get('/limpiar', async (req, res) => {
 });
 
 // ==========================================
-// RUTA SECRETA: PANEL DE ADMINISTRACIÓN
+// RUTA: PANEL DE ADMINISTRACIÓN DUAL
 // ==========================================
 app.get('/reporte', (req, res) => {
     const htmlDashboard = `
@@ -84,79 +79,95 @@ app.get('/reporte', (req, res) => {
     <html lang="es">
     <head>
         <meta charset="utf-8">
-        <title>Dashboard Admin - TESE</title>
+        <title>Dashboard Dual - TESE</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 40px; display: flex; justify-content: center; }
-            .dashboard-card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 800px; width: 100%; text-align: center; }
-            h1 { color: #002147; font-weight: 800; margin-bottom: 10px; }
-            p { color: #666; font-size: 1.1rem; margin-bottom: 40px; }
-            .chart-container { position: relative; height: 400px; width: 100%; display: flex; justify-content: center; }
+            body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+            .dashboard-card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 800px; text-align: center; margin-bottom: 30px; }
+            h1 { color: #002147; font-weight: 800; margin-bottom: 5px; }
+            h2 { color: #004b93; border-bottom: 2px solid #00e5ff; display: inline-block; padding-bottom: 5px; margin-bottom: 25px; }
+            .chart-container { position: relative; height: 300px; width: 100%; display: flex; justify-content: center; margin-bottom: 20px; }
+            .status-empty { color: #888; font-style: italic; margin-top: 50px; }
         </style>
     </head>
     <body>
+        <h1>📊 Dashboard de Inteligencia de Negocios</h1>
+        <p>Administración y Configuración de Redes - Proyecto José 2026</p>
+
         <div class="dashboard-card">
-            <h1>📊 Inteligencia de Negocios</h1>
-            <p>Análisis de interacciones en tiempo real - Proyecto TESE</p>
-            <div class="chart-container">
-                <canvas id="miGrafica"></canvas>
+            <h2>🛒 Telemetría de Ventas (Tienda)</h2>
+            <div id="cont-tienda" class="chart-container">
+                <canvas id="graficaTienda"></canvas>
             </div>
         </div>
+
+        <div class="dashboard-card">
+            <h2>📝 Telemetría de Contenido (Blog IA)</h2>
+            <div id="cont-blog" class="chart-container">
+                <canvas id="graficaBlog"></canvas>
+            </div>
+        </div>
+
         <script>
             fetch('/obtener-mapa')
                 .then(res => res.json())
                 .then(datos => {
+                    
+                    // 1. PROCESAR DATOS TIENDA
                     const datosTienda = datos.filter(d => d.pagina === "App-Tienda");
-                    if (datosTienda.length === 0) {
-                        document.querySelector('.chart-container').innerHTML = '<h3 style="color:#ff4d4d; margin-top:100px;">⚠️ No hay clics registrados aún.</h3>';
-                        return; 
+                    if (datosTienda.length > 0) {
+                        const conteoT = {};
+                        datosTienda.forEach(d => { 
+                            let nombre = d.elemento_clic || "Interacción";
+                            conteoT[nombre] = (conteoT[nombre] || 0) + 1; 
+                        });
+                        crearGrafica('graficaTienda', conteoT, 'Interacciones de Compra');
+                    } else {
+                        document.getElementById('cont-tienda').innerHTML = '<p class="status-empty">Sin datos de la tienda aún.</p>';
                     }
-                    const conteo = {};
-                    datosTienda.forEach(d => { 
-                        let nombre = d.elemento_clic || "Clic genérico";
-                        conteo[nombre] = (conteo[nombre] || 0) + 1; 
-                    });
-                    new Chart(document.getElementById('miGrafica'), {
-                        type: 'doughnut',
-                        data: {
-                            labels: Object.keys(conteo),
-                            datasets: [{
-                                data: Object.values(conteo),
-                                backgroundColor: ['#00e5ff', '#002147', '#ff4d4d', '#ffcc00', '#33cc33', '#cc33ff', '#ff9900'],
-                                borderWidth: 2,
-                                borderColor: '#ffffff'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { position: 'right' },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            let valor = context.raw;
-                                            let total = context.dataset.data.reduce((acc, val) => acc + val, 0);
-                                            let porcentaje = ((valor / total) * 100).toFixed(1) + '%';
-                                            return context.label + ': ' + valor + ' clics (' + porcentaje + ')';
-                                        }
-                                    }
-                                }
-                            }
+
+                    // 2. PROCESAR DATOS BLOG
+                    const datosBlog = datos.filter(d => d.pagina === "blog-ia-index");
+                    if (datosBlog.length > 0) {
+                        const conteoB = {};
+                        datosBlog.forEach(d => { 
+                            let nombre = d.seccion_texto || "Lectura General";
+                            conteoB[nombre] = (conteoB[nombre] || 0) + 1; 
+                        });
+                        crearGrafica('graficaBlog', conteoB, 'Temas de Interés');
+                    } else {
+                        document.getElementById('cont-blog').innerHTML = '<p class="status-empty">Sin datos de lectura del blog aún.</p>';
+                    }
+                });
+
+            function crearGrafica(id, conteo, titulo) {
+                new Chart(document.getElementById(id), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(conteo),
+                        datasets: [{
+                            data: Object.values(conteo),
+                            backgroundColor: ['#00e5ff', '#002147', '#ff4d4d', '#ffcc00', '#33cc33', '#cc33ff', '#ff9900'],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'right' }
                         }
-                    });
-                })
+                    }
+                });
+            }
         </script>
     </body>
     </html>`;
     res.send(htmlDashboard);
 });
 
-// ==========================================
-// 4. INICIO DEL MOTOR (MODIFICADO PARA LA NUBE)
-// ==========================================
 const PORT = process.env.PORT || 3000;
-// Escuchamos en 0.0.0.0 para que acepte conexiones externas (App Android)
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`📡 Servidor Backend activo en Puerto ${PORT}`);
 });
